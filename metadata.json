@@ -1,0 +1,7 @@
+{
+  "name": "WebDesk Pro",
+  "description": "A web-based remote desktop prototype using WebRTC and WebSockets.",
+  "requestFramePermissions": [
+    "display-capture"
+  ]
+}
