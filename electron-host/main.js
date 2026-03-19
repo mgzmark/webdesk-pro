@@ -1,6 +1,6 @@
 const { app, BrowserWindow, ipcMain, desktopCapturer, screen: electronScreen } = require('electron');
 const path = require('path');
-const { mouse, Point, screen: nutScreen, Button, keyboard, Key } = require('@nut-tree-fork/nut-js');
+const { mouse, Point, Button, keyboard, Key } = require('@nut-tree-fork/nut-js');
 
 // 配置 nut.js，去掉默认的延迟以提高响应速度，但保留 5ms 防止操作系统丢弃过快的事件
 mouse.config.autoDelayMs = 5;
