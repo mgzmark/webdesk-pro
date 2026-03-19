@@ -1,0 +1,28 @@
+{
+  "name": "webdesk-electron-host",
+  "version": "1.0.0",
+  "description": "Standalone desktop host for WebDesk Pro",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "dependencies": {
+    "@nut-tree-fork/nut-js": "^4.1.1",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "electron": "^29.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.webdesk.host",
+    "productName": "WebDesk Host",
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    }
+  }
+}
