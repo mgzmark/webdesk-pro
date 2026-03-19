@@ -1,12 +1,15 @@
-// 默认连接到本地的信令服务器
-// 如果你要连云端，请修改为: const WS_URL = 'wss://你的分享链接.run.app/signaling';
-const WS_URL = 'ws://192.168.221.79:3000/signaling'; 
+const runtimeConfig = window.electronAPI.getRuntimeConfig();
+const WS_URL = runtimeConfig.signalingUrl || 'ws://localhost:3000/signaling';
 
 let ws;
 let pc;
 let dc;
 let localStream;
 let currentClientId = null;
+let iceServers = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:global.stun.twilio.com:3478' }
+];
 
 const statusText = document.getElementById('status-text');
 const statusDot = document.getElementById('status-dot');
@@ -25,6 +28,10 @@ function connectSignaling() {
 
   ws.onopen = () => {
     updateStatus('Connected to signaling server', 'success');
+    ws.send(JSON.stringify({
+      type: 'hello',
+      clientKind: 'electron_host'
+    }));
   };
 
   ws.onclose = () => {
@@ -41,9 +48,17 @@ function connectSignaling() {
 
     switch (data.type) {
       case 'registered':
+        if (Array.isArray(data.iceServers)) {
+          iceServers = data.iceServers;
+        }
         localIdEl.innerText = data.id;
         localPassEl.innerText = data.pass;
         updateStatus('Ready for connection', 'success');
+        break;
+      case 'hello_ack':
+        if (Array.isArray(data.iceServers)) {
+          iceServers = data.iceServers;
+        }
         break;
         
       case 'incoming_connection':
@@ -55,6 +70,21 @@ function connectSignaling() {
 
       case 'offer':
         await handleOffer(data);
+        break;
+
+      case 'session_closed':
+        updateStatus(data.message || 'Session ended. Ready.', 'success');
+        if (localStream) {
+          localStream.getTracks().forEach((track) => track.stop());
+          localStream = null;
+        }
+        if (pc) {
+          pc.close();
+          pc = null;
+        }
+        dc = null;
+        currentClientId = null;
+        window.electronAPI.resetInput();
         break;
 
       case 'candidate':
@@ -107,10 +137,7 @@ async function startScreenShare(targetId) {
 
 async function handleOffer(data) {
   pc = new RTCPeerConnection({
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:global.stun.twilio.com:3478' }
-    ]
+    iceServers
   });
 
   pc.onicecandidate = (event) => {
