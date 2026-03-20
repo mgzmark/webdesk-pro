@@ -17,7 +17,13 @@
   },
   "build": {
     "appId": "com.webdesk.host",
-    "productName": "WebDesk Host",
+    "productName": "WebDesk Pro Host",
+    "extraResources": [
+      {
+        "from": "config.json",
+        "to": "config.json"
+      }
+    ],
     "win": {
       "target": "nsis"
     },

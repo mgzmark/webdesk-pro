@@ -88,6 +88,8 @@ ws.on('message', async (data) => {
   
   if (msg.type === 'bound') {
     console.log('✅ 成功绑定到被控端网页！等待控制指令...');
+  } else if (msg.type === 'session_closed') {
+    console.log(`ℹ️ 会话结束: ${msg.message || '远端已断开'}`);
   } else if (msg.type === 'error') {
     console.error('❌ 绑定失败:', msg.message);
   } else if (msg.type === 'mouse_event') {
