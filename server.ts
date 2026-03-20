@@ -110,6 +110,7 @@ function buildIceServers(): IceServerConfig[] {
 const ICE_SERVERS = buildIceServers();
 
 function isAllowedOrigin(originHeader?: string, requestHost?: string) {
+function isAllowedOrigin(originHeader?: string) {
   if (ALLOWED_ORIGINS.size === 0) {
     return true;
   }
@@ -131,6 +132,7 @@ function isAllowedOrigin(originHeader?: string, requestHost?: string) {
     } catch {
       // ignore malformed origin, fall back to explicit allowlist check
     }
+    return false;
   }
 
   return ALLOWED_ORIGINS.has(originHeader);
@@ -483,6 +485,7 @@ async function startServer() {
 
   wss.on("connection", (ws, req) => {
     if (!isAllowedOrigin(req.headers.origin, req.headers.host)) {
+    if (!isAllowedOrigin(req.headers.origin)) {
       console.warn("Rejected signaling connection due to origin:", req.headers.origin);
       safeSend(ws, { type: "error", message: "Origin is not allowed." });
       ws.close(1008, "Origin not allowed");
@@ -551,6 +554,14 @@ async function startServer() {
           if (!targetPeer) return;
           relaySignalMessage(peer, targetPeer, payload, payload.type);
           break;
+        }
+        case "mouse_event":
+        case "keyboard_event": {
+          const targetPeer = validateTargetPeer(peer, payload.targetId);
+          if (!targetPeer) return;
+          relayInputMessage(peer, targetPeer, payload, payload.type);
+          break;
+        }
         }
         case "mouse_event":
         case "keyboard_event": {
