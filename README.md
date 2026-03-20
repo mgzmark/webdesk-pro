@@ -61,6 +61,16 @@ npm run dev
 
 Electron Host 是正式推荐的被控端实现。
 
+打包后默认会读取 `electron-host/config.json`（并随安装包一起带上），当前仓库已经预置为：
+
+```json
+{
+  "wsUrl": "ws://192.168.221.79:3000/signaling"
+}
+```
+
+也就是说，**打包后发到另一台电脑，直接双击启动就会默认连接到 `192.168.221.79`**；如果你后续要改服务器地址，优先修改 `electron-host/config.json` 再重新打包。
+
 ```bash
 cd electron-host
 npm install
@@ -72,6 +82,20 @@ npm start
 ```bash
 WS_URL=wss://your-domain.example/signaling npm start
 ```
+
+打包命令：
+
+```bash
+cd electron-host
+npm run build
+```
+
+Electron Host 的运行时地址优先级为：
+
+1. `WS_URL` 环境变量
+2. 打包产物旁边的 `config.json`
+3. 安装包内携带的 `config.json`
+4. 内置默认值 `ws://192.168.221.79:3000/signaling`
 
 更多说明见：
 
