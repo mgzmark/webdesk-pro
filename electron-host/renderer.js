@@ -26,6 +26,7 @@ function updateStatus(text, state = 'warning') {
 }
 
 function connectSignaling() {
+  updateStatus(`Connecting to ${WS_URL}`, 'warning');
   ws = new WebSocket(WS_URL);
 
   ws.onopen = () => {
@@ -37,12 +38,13 @@ function connectSignaling() {
   };
 
   ws.onclose = () => {
-    updateStatus('Disconnected. Reconnecting...', 'error');
+    updateStatus(`Disconnected from ${WS_URL}. Reconnecting...`, 'error');
     setTimeout(connectSignaling, 3000);
   };
 
   ws.onerror = (err) => {
     console.error('WebSocket error:', err);
+    updateStatus(`WebSocket error: ${WS_URL}`, 'error');
   };
 
   ws.onmessage = async (event) => {
