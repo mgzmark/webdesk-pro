@@ -1,9 +1,9 @@
 const WebSocket = require('ws');
 const { mouse, Point, screen, Button, keyboard, Key } = require('@nut-tree-fork/nut-js');
 
-// 配置 nut.js，去掉默认的延迟以提高响应速度，但保留 5ms 防止操作系统丢弃过快的事件
-mouse.config.autoDelayMs = 5;
-keyboard.config.autoDelayMs = 5;
+// 配置 nut.js，去掉默认的延迟以提高响应速度
+mouse.config.autoDelayMs = 0;
+keyboard.config.autoDelayMs = 0;
 
 // Web KeyboardEvent.code 到 nut.js Key 的映射
 const keyMap = {
@@ -88,8 +88,6 @@ ws.on('message', async (data) => {
   
   if (msg.type === 'bound') {
     console.log('✅ 成功绑定到被控端网页！等待控制指令...');
-  } else if (msg.type === 'session_closed') {
-    console.log(`ℹ️ 会话结束: ${msg.message || '远端已断开'}`);
   } else if (msg.type === 'error') {
     console.error('❌ 绑定失败:', msg.message);
   } else if (msg.type === 'mouse_event') {
@@ -101,6 +99,10 @@ ws.on('message', async (data) => {
       // 将网页传来的相对坐标 (0~1) 转换为你电脑屏幕的绝对坐标
       const x = Math.max(0, Math.min(Math.round(msg.x * width), width - 1));
       const y = Math.max(0, Math.min(Math.round(msg.y * height), height - 1));
+
+      if (msg.mouseType === 'mousedown' || msg.mouseType === 'mouseup' || msg.mouseType === 'mouseup_global') {
+        console.log(`[Host-WS] Received mouse event: ${msg.mouseType}, button: ${msg.button}`);
+      }
 
       if (msg.mouseType === 'mousemove') {
         if (typeof x !== 'number' || typeof y !== 'number' || isNaN(x) || isNaN(y)) {
@@ -116,9 +118,9 @@ ws.on('message', async (data) => {
         processQueue();
       } else if (msg.mouseType === 'click') {
         actionQueue.push({ type: 'action', fn: async () => {
-          if (msg.button === 2) await mouse.click(Button.RIGHT);
-          else if (msg.button === 1) await mouse.click(Button.MIDDLE);
-          else await mouse.leftClick();
+          if (msg.button === 2) { await mouse.pressButton(Button.RIGHT); await mouse.releaseButton(Button.RIGHT); }
+          else if (msg.button === 1) { await mouse.pressButton(Button.MIDDLE); await mouse.releaseButton(Button.MIDDLE); }
+          else { await mouse.pressButton(Button.LEFT); await mouse.releaseButton(Button.LEFT); }
           console.log(`执行点击: x=${x}, y=${y}, button=${msg.button}`);
         }});
         processQueue();
@@ -130,12 +132,12 @@ ws.on('message', async (data) => {
           console.log(`鼠标按下: x=${x}, y=${y}, button=${msg.button}`);
         }});
         processQueue();
-      } else if (msg.mouseType === 'mouseup') {
+      } else if (msg.mouseType === 'mouseup' || msg.mouseType === 'mouseup_global') {
         actionQueue.push({ type: 'action', fn: async () => {
-          if (msg.button === 2) await mouse.releaseButton(Button.RIGHT);
-          else if (msg.button === 1) await mouse.releaseButton(Button.MIDDLE);
-          else await mouse.releaseButton(Button.LEFT);
-          console.log(`鼠标抬起: x=${x}, y=${y}, button=${msg.button}`);
+          try { await mouse.releaseButton(Button.LEFT); } catch(e){}
+          try { await mouse.releaseButton(Button.RIGHT); } catch(e){}
+          try { await mouse.releaseButton(Button.MIDDLE); } catch(e){}
+          console.log(`鼠标强制抬起(防卡死): x=${x}, y=${y}, button=${msg.button}`);
         }});
         processQueue();
       }

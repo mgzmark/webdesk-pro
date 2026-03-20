@@ -1,10 +1,20 @@
 const { app, BrowserWindow, ipcMain, desktopCapturer, screen: electronScreen } = require('electron');
 const path = require('path');
-const { mouse, Point, Button, keyboard, Key } = require('@nut-tree-fork/nut-js');
+const { mouse, Point, screen: nutScreen, Button, keyboard, Key } = require('@nut-tree-fork/nut-js');
 
-// 配置 nut.js，去掉默认的延迟以提高响应速度，但保留 5ms 防止操作系统丢弃过快的事件
-mouse.config.autoDelayMs = 5;
-keyboard.config.autoDelayMs = 5;
+// 禁用硬件加速，解决 Windows 下 DXGI 桌面捕捉失败 (DxgiDuplicatorController failed) 的问题
+app.disableHardwareAcceleration();
+
+// 强制禁用 WebRTC 的 DXGI 捕捉，回退到 GDI 捕捉，这在无显示器或 RDP 环境下更稳定
+// 同时禁用 WebRtcHideLocalIpsWithMdns，解决 Windows 下无法解析 .local mDNS 地址导致连接失败的问题 (errorcode: -105)
+app.commandLine.appendSwitch('disable-features', 'WebRtcAllowDxgi,WebRtcUseDxgi,WebRtcHideLocalIpsWithMdns,mDNS');
+app.commandLine.appendSwitch('enable-webrtc-hide-local-ips-with-mdns', 'false');
+// 隐藏捕获器光标，防止在 GDI 模式下因为权限问题导致获取光标失败 (Error 5)
+app.commandLine.appendSwitch('enable-features', 'WebRtcHideCapturer');
+
+// 配置 nut.js，去掉默认的延迟以提高响应速度
+// mouse.config.autoDelayMs = 0;
+// keyboard.config.autoDelayMs = 0;
 
 // Web KeyboardEvent.code 到 nut.js Key 的映射
 const keyMap = {
@@ -54,7 +64,8 @@ app.whenReady().then(() => {
 
   // 1. 处理渲染进程获取屏幕源的请求
   ipcMain.handle('get-desktop-sources', async () => {
-    const sources = await desktopCapturer.getSources({ types: ['screen'] });
+    // 设置 thumbnailSize 为 0x0，防止在获取屏幕列表时因为生成缩略图而触发 DXGI 捕捉超时
+    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } });
     const primaryDisplay = electronScreen.getPrimaryDisplay();
     // 确保获取的是真正的主屏幕
     const primarySource = sources.find(s => s.display_id === primaryDisplay.id.toString()) || sources[0];
@@ -71,10 +82,12 @@ app.whenReady().then(() => {
       const item = actionQueue.shift();
       try {
         if (item.type === 'move') {
+          console.log(`[Electron-Main] Executing move to ${item.pos.x}, ${item.pos.y}`);
           await mouse.setPosition(new Point(item.pos.x, item.pos.y));
           // 移动事件不需要长延迟，稍微等待即可
           await new Promise(resolve => setTimeout(resolve, 5));
         } else if (item.type === 'action') {
+          console.log(`[Electron-Main] Executing action`);
           await item.fn();
           // 强制等待 50ms，确保操作系统有足够时间处理上一个原生事件，防止 mousedown 和 mouseup 粘连
           await new Promise(resolve => setTimeout(resolve, 50));
@@ -92,21 +105,17 @@ app.whenReady().then(() => {
       if (typeof x !== 'number' || typeof y !== 'number' || isNaN(x) || isNaN(y)) {
         return;
       }
-      // x 和 y 是相对坐标 (0.0 ~ 1.0)
-      const primaryDisplay = electronScreen.getPrimaryDisplay();
-      const bounds = primaryDisplay.bounds;
       
-      // nut.js 在 Windows/Linux 上需要物理像素，在 macOS 上需要逻辑像素
-      const isMac = process.platform === 'darwin';
-      const scale = isMac ? 1 : (primaryDisplay.scaleFactor || 1);
-
       // 限制坐标在 0~1 之间，防止越界
       const clampedX = Math.max(0, Math.min(x, 1));
       const clampedY = Math.max(0, Math.min(y, 1));
 
-      // 映射到绝对物理坐标 (考虑多显示器时主屏幕起点可能不是 0,0)
-      const targetX = Math.round((bounds.x + clampedX * bounds.width) * scale);
-      const targetY = Math.round((bounds.y + clampedY * bounds.height) * scale);
+      // 使用 nut.js 的屏幕尺寸，确保坐标映射准确
+      const screenWidth = await nutScreen.width();
+      const screenHeight = await nutScreen.height();
+
+      const targetX = Math.round(clampedX * screenWidth);
+      const targetY = Math.round(clampedY * screenHeight);
       
       const lastItem = actionQueue[actionQueue.length - 1];
       if (lastItem && lastItem.type === 'move') {
@@ -114,6 +123,7 @@ app.whenReady().then(() => {
       } else {
         actionQueue.push({ type: 'move', pos: { x: targetX, y: targetY } });
       }
+      console.log(`[Electron-Main] Enqueued mouse-move to ${targetX}, ${targetY}`);
       processQueue();
     } catch (err) {
       console.error('Mouse move error:', err);
@@ -136,11 +146,13 @@ app.whenReady().then(() => {
 
   // 4. 处理鼠标按下指令 (用于拖拽)
   ipcMain.on('mouse-down', async (event, { button = 0 } = {}) => {
+    console.log(`[${new Date().toISOString()}] [Electron-Main] Enqueuing mouse-down, button: ${button}`);
     actionQueue.push({ type: 'action', fn: async () => {
       try {
         if (button === 2) await mouse.pressButton(Button.RIGHT);
         else if (button === 1) await mouse.pressButton(Button.MIDDLE);
         else await mouse.pressButton(Button.LEFT);
+        console.log(`[${new Date().toISOString()}] [Electron-Main] Executed mouse-down, button: ${button}`);
       } catch (err) {
         console.error('Mouse down error:', err);
       }
@@ -150,14 +162,12 @@ app.whenReady().then(() => {
 
   // 5. 处理鼠标抬起指令 (用于拖拽)
   ipcMain.on('mouse-up', async (event, { button = 0 } = {}) => {
+    console.log(`[${new Date().toISOString()}] [Electron-Main] Enqueuing mouse-up, button: ${button}`);
     actionQueue.push({ type: 'action', fn: async () => {
-      try {
-        if (button === 2) await mouse.releaseButton(Button.RIGHT);
-        else if (button === 1) await mouse.releaseButton(Button.MIDDLE);
-        else await mouse.releaseButton(Button.LEFT);
-      } catch (err) {
-        console.error('Mouse up error:', err);
-      }
+      try { await mouse.releaseButton(Button.LEFT); } catch(e){}
+      try { await mouse.releaseButton(Button.RIGHT); } catch(e){}
+      try { await mouse.releaseButton(Button.MIDDLE); } catch(e){}
+      console.log(`[${new Date().toISOString()}] [Electron-Main] Executed mouse-up (all released), button: ${button}`);
     }});
     processQueue();
   });

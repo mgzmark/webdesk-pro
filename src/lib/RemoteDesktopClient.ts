@@ -7,10 +7,6 @@ export class RemoteDesktopClient {
   private localStream: MediaStream | null = null;
   private targetId: string | null = null;
   private isHost: boolean = false;
-  private iceServers: RTCIceServer[] = [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:global.stun.twilio.com:3478' }
-  ];
 
   private static instance: RemoteDesktopClient;
 
@@ -28,12 +24,6 @@ export class RemoteDesktopClient {
     if (this.ws) return;
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     this.ws = new WebSocket(`${protocol}//${window.location.host}/signaling`);
-    this.ws.onopen = () => {
-      this.ws?.send(JSON.stringify({
-        type: 'hello',
-        clientKind: 'browser'
-      }));
-    };
 
     this.ws.onmessage = async (event) => {
       const data = JSON.parse(event.data);
@@ -41,15 +31,7 @@ export class RemoteDesktopClient {
 
       switch (data.type) {
         case 'registered':
-          if (Array.isArray(data.iceServers)) {
-            this.iceServers = data.iceServers;
-          }
           store.setLocalCredentials(data.id, data.pass);
-          break;
-        case 'hello_ack':
-          if (Array.isArray(data.iceServers)) {
-            this.iceServers = data.iceServers;
-          }
           break;
         case 'error':
           store.setError(data.message);
@@ -66,15 +48,8 @@ export class RemoteDesktopClient {
         case 'control_accepted':
           // 对方接受了控制请求，我们成为 Viewer (控制端)
           this.isHost = false;
-          if (Array.isArray(data.iceServers)) {
-            this.iceServers = data.iceServers;
-          }
           store.setConnectionStatus('connected');
           await this.initiateWebRTC();
-          break;
-        case 'session_closed':
-          store.setError(data.message || 'The remote session has ended.');
-          this.disconnect(false);
           break;
         case 'offer':
           await this.handleOffer(data);
@@ -85,14 +60,6 @@ export class RemoteDesktopClient {
         case 'candidate':
           await this.handleCandidate(data);
           break;
-      }
-    };
-
-    this.ws.onclose = () => {
-      this.ws = null;
-      if (useStore.getState().connectionStatus !== 'disconnected') {
-        useStore.getState().setError('Disconnected from signaling server.');
-        this.disconnect(false);
       }
     };
   }
@@ -176,7 +143,10 @@ export class RemoteDesktopClient {
   // 4. 创建 RTCPeerConnection 基础配置
   private createPeerConnection() {
     this.pc = new RTCPeerConnection({
-      iceServers: this.iceServers
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:global.stun.twilio.com:3478' }
+      ]
     });
 
     this.pc.onicecandidate = (event) => {
@@ -264,6 +234,10 @@ export class RemoteDesktopClient {
 
   private async handleCandidate(data: any) {
     try {
+      if (data.candidate && data.candidate.candidate && data.candidate.candidate.includes('.local')) {
+        console.log('Ignored mDNS candidate from peer to prevent -105 error');
+        return;
+      }
       await this.pc?.addIceCandidate(new RTCIceCandidate(data.candidate));
     } catch (e) {
       console.error("Error adding ice candidate", e);
@@ -295,6 +269,10 @@ export class RemoteDesktopClient {
     const relativeX = x / width;
     const relativeY = y / height;
 
+    if (type === 'mousedown' || type === 'mouseup' || type === 'mouseup_global') {
+      console.log(`[${new Date().toISOString()}] [Client] sendMouseEvent: ${type}, button: ${button}, targetId: ${this.targetId}, dcOpen: ${this.dc?.readyState === 'open'}, wsOpen: ${this.ws?.readyState === WebSocket.OPEN}`);
+    }
+
     // 1. 通过 DataChannel 发送给被控端网页（用于显示红点）
     if (this.dc && this.dc.readyState === 'open') {
       this.dc.send(JSON.stringify({
@@ -307,6 +285,9 @@ export class RemoteDesktopClient {
 
     // 2. 通过 WebSocket 发送给被控端本地 Node.js 脚本（用于真正控制鼠标）
     if (this.ws && this.ws.readyState === WebSocket.OPEN && this.targetId) {
+      if (type === 'mousemove') {
+        console.log(`[Client] Sending mousemove to ${this.targetId}: ${relativeX}, ${relativeY}`);
+      }
       this.ws.send(JSON.stringify({
         type: 'mouse_event',
         targetId: this.targetId,
@@ -315,6 +296,10 @@ export class RemoteDesktopClient {
         y: relativeY,
         button
       }));
+    } else {
+      if (type === 'mousemove') {
+        console.log(`[Client] Cannot send mousemove. ws readyState: ${this.ws?.readyState}, targetId: ${this.targetId}`);
+      }
     }
   }
 
@@ -343,14 +328,7 @@ export class RemoteDesktopClient {
   }
 
   // 9. 断开连接并清理资源
-  public disconnect(sendSessionEnd: boolean = true) {
-    if (sendSessionEnd && this.ws?.readyState === WebSocket.OPEN && this.targetId) {
-      this.ws.send(JSON.stringify({
-        type: 'end_session',
-        targetId: this.targetId
-      }));
-    }
-
+  public disconnect() {
     this.localStream?.getTracks().forEach(t => t.stop());
     this.pc?.close();
     this.dc?.close();

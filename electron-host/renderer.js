@@ -1,34 +1,12 @@
-const FALLBACK_WS_URL = 'ws://192.168.221.79:3000/signaling';
-
-let runtimeConfig = {
-  signalingUrl: FALLBACK_WS_URL,
-  configSource: 'renderer-fallback'
-};
-
-try {
-  if (window.electronAPI && typeof window.electronAPI.getRuntimeConfig === 'function') {
-    runtimeConfig = window.electronAPI.getRuntimeConfig() || runtimeConfig;
-  }
-} catch (error) {
-  console.error('[Electron Host] Failed to load runtime config from preload:', error);
-}
-
-const WS_URL = runtimeConfig.signalingUrl || FALLBACK_WS_URL;
-console.log('[Electron Host] Runtime config:', runtimeConfig);
-const runtimeConfig = window.electronAPI.getRuntimeConfig();
-const WS_URL = runtimeConfig.signalingUrl;
-console.log('[Electron Host] Runtime config:', runtimeConfig);
-const WS_URL = runtimeConfig.signalingUrl || 'ws://localhost:3000/signaling';
+// 默认连接到本地的信令服务器
+// 如果你要连云端，请修改为: const WS_URL = 'wss://你的分享链接.run.app/signaling';
+const WS_URL = 'ws://192.168.221.79:3000/signaling'; 
 
 let ws;
 let pc;
 let dc;
 let localStream;
 let currentClientId = null;
-let iceServers = [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:global.stun.twilio.com:3478' }
-];
 
 const statusText = document.getElementById('status-text');
 const statusDot = document.getElementById('status-dot');
@@ -43,25 +21,19 @@ function updateStatus(text, state = 'warning') {
 }
 
 function connectSignaling() {
-  updateStatus(`Connecting to ${WS_URL}`, 'warning');
   ws = new WebSocket(WS_URL);
 
   ws.onopen = () => {
     updateStatus('Connected to signaling server', 'success');
-    ws.send(JSON.stringify({
-      type: 'hello',
-      clientKind: 'electron_host'
-    }));
   };
 
   ws.onclose = () => {
-    updateStatus(`Disconnected from ${WS_URL}. Reconnecting...`, 'error');
+    updateStatus('Disconnected. Reconnecting...', 'error');
     setTimeout(connectSignaling, 3000);
   };
 
   ws.onerror = (err) => {
     console.error('WebSocket error:', err);
-    updateStatus(`WebSocket error: ${WS_URL}`, 'error');
   };
 
   ws.onmessage = async (event) => {
@@ -69,17 +41,9 @@ function connectSignaling() {
 
     switch (data.type) {
       case 'registered':
-        if (Array.isArray(data.iceServers)) {
-          iceServers = data.iceServers;
-        }
         localIdEl.innerText = data.id;
         localPassEl.innerText = data.pass;
         updateStatus('Ready for connection', 'success');
-        break;
-      case 'hello_ack':
-        if (Array.isArray(data.iceServers)) {
-          iceServers = data.iceServers;
-        }
         break;
         
       case 'incoming_connection':
@@ -93,29 +57,42 @@ function connectSignaling() {
         await handleOffer(data);
         break;
 
-      case 'session_closed':
-        updateStatus(data.message || 'Session ended. Ready.', 'success');
-        if (localStream) {
-          localStream.getTracks().forEach((track) => track.stop());
-          localStream = null;
-        }
-        if (pc) {
-          pc.close();
-          pc = null;
-        }
-        dc = null;
-        currentClientId = null;
-        window.electronAPI.resetInput();
-        break;
-
       case 'candidate':
-        if (pc) {
+        if (pc && data.candidate) {
           try {
+            // 过滤掉 .local 的 mDNS 候选者，防止底层 socket_manager 报错 -105
+            if (data.candidate.candidate && data.candidate.candidate.includes('.local')) {
+              console.log('Ignored mDNS candidate from peer to prevent -105 error');
+              break;
+            }
             await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
           } catch (e) {
             console.error("Error adding ice candidate", e);
           }
         }
+        break;
+
+      case 'mouse_event':
+        // 接收来自 WebSocket 的鼠标事件 (作为 WebRTC DataChannel 的备用/补充)
+        if (data.mouseType === 'mousedown' || data.mouseType === 'mouseup' || data.mouseType === 'mouseup_global') {
+          console.log(`[${new Date().toISOString()}] [Electron-Renderer] Received via WebSocket: ${data.mouseType}, button: ${data.button}`);
+        }
+        
+        if (data.mouseType === 'mousemove') {
+          console.log(`[Electron-Renderer] Received mousemove: ${data.x}, ${data.y}`);
+          window.electronAPI.moveMouse({ x: data.x, y: data.y });
+        } else if (data.mouseType === 'click') {
+          window.electronAPI.mouseDown({ button: data.button });
+          window.electronAPI.mouseUp({ button: data.button });
+        } else if (data.mouseType === 'mousedown') {
+          window.electronAPI.mouseDown({ button: data.button });
+        } else if (data.mouseType === 'mouseup' || data.mouseType === 'mouseup_global') {
+          window.electronAPI.mouseUp({ button: data.button });
+        }
+        break;
+
+      case 'keyboard_event':
+        window.electronAPI.sendKeyEvent(data);
         break;
     }
   };
@@ -158,7 +135,10 @@ async function startScreenShare(targetId) {
 
 async function handleOffer(data) {
   pc = new RTCPeerConnection({
-    iceServers
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:global.stun.twilio.com:3478' }
+    ]
   });
 
   pc.onicecandidate = (event) => {
@@ -171,22 +151,13 @@ async function handleOffer(data) {
     }
   };
 
-  // 监听数据通道，接收鼠标指令
+  // 监听数据通道，接收鼠标指令 (已废弃，改用 WebSocket 接收以防止被 DXGI 错误阻塞)
   pc.ondatachannel = (event) => {
     dc = event.channel;
     dc.onmessage = (e) => {
-      const msg = JSON.parse(e.data);
-      if (msg.type === 'mousemove') {
-        window.electronAPI.moveMouse({ x: msg.x, y: msg.y });
-      } else if (msg.type === 'click') {
-        window.electronAPI.clickMouse({ button: msg.button });
-      } else if (msg.type === 'mousedown') {
-        window.electronAPI.mouseDown({ button: msg.button });
-      } else if (msg.type === 'mouseup') {
-        window.electronAPI.mouseUp({ button: msg.button });
-      } else if (msg.type === 'keyboard_event') {
-        window.electronAPI.sendKeyEvent(msg);
-      }
+      // 忽略 DataChannel 的控制消息，全部走 WebSocket
+      // const msg = JSON.parse(e.data);
+      // console.log(`[${new Date().toISOString()}] [Electron-Renderer] Ignored DataChannel message: ${msg.type}`);
     };
   };
 

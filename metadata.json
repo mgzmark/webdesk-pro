@@ -1,6 +1,6 @@
 {
   "name": "WebDesk Pro",
-  "description": "A hardened remote desktop stack with a WebRTC viewer, Electron Host, session control, and TURN-ready signaling.",
+  "description": "A web-based remote desktop prototype using WebRTC and WebSockets.",
   "requestFramePermissions": [
     "display-capture"
   ]
