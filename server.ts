@@ -120,6 +120,7 @@ function isAllowedOrigin(originHeader?: string) {
 
   if (originHeader === "null" || originHeader.startsWith("file://")) {
     return true;
+    return false;
   }
 
   return ALLOWED_ORIGINS.has(originHeader);
