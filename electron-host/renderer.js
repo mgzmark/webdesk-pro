@@ -1,3 +1,20 @@
+const FALLBACK_WS_URL = 'ws://192.168.221.79:3000/signaling';
+
+let runtimeConfig = {
+  signalingUrl: FALLBACK_WS_URL,
+  configSource: 'renderer-fallback'
+};
+
+try {
+  if (window.electronAPI && typeof window.electronAPI.getRuntimeConfig === 'function') {
+    runtimeConfig = window.electronAPI.getRuntimeConfig() || runtimeConfig;
+  }
+} catch (error) {
+  console.error('[Electron Host] Failed to load runtime config from preload:', error);
+}
+
+const WS_URL = runtimeConfig.signalingUrl || FALLBACK_WS_URL;
+console.log('[Electron Host] Runtime config:', runtimeConfig);
 const runtimeConfig = window.electronAPI.getRuntimeConfig();
 const WS_URL = runtimeConfig.signalingUrl;
 console.log('[Electron Host] Runtime config:', runtimeConfig);

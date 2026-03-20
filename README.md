@@ -97,6 +97,9 @@ Electron Host 的运行时地址优先级为：
 3. 安装包内携带的 `config.json`
 4. 内置默认值 `ws://192.168.221.79:3000/signaling`
 
+默认情况下，服务端**不会严格拦截 Origin**；只有在你显式设置 `STRICT_ORIGIN_CHECK=true` 时，`ALLOWED_ORIGINS` 才会真正生效。这样可以尽量保持本地 / 局域网部署与之前版本一致的可连接性。  
+
+如果你确实开启了 `STRICT_ORIGIN_CHECK=true`，请同时保留 `ALLOW_NATIVE_ORIGINLESS=true`；因为安装版 Electron Host 往往没有浏览器页面那样的 Origin 头，或者会以 `file://` / `null` 的形式出现。服务端还会自动放行与当前 `Host` 头一致的浏览器 Origin，因此像 `http://192.168.x.x:3000` 这种局域网地址访问也不需要额外再写一遍白名单。
 如果你的服务端开启了 `ALLOWED_ORIGINS`，请同时保留 `ALLOW_NATIVE_ORIGINLESS=true`；因为安装版 Electron Host 往往没有浏览器页面那样的 Origin 头，或者会以 `file://` / `null` 的形式出现。服务端还会自动放行与当前 `Host` 头一致的浏览器 Origin，因此像 `http://192.168.x.x:3000` 这种局域网地址访问也不需要额外再写一遍白名单。
 如果你的服务端开启了 `ALLOWED_ORIGINS`，请同时保留 `ALLOW_NATIVE_ORIGINLESS=true`；因为安装版 Electron Host 往往没有浏览器页面那样的 Origin 头，或者会以 `file://` / `null` 的形式出现。
 
@@ -125,6 +128,7 @@ WS_URL=wss://your-domain.example/signaling node host.cjs <HOST_ID> <HOST_PASS>
 
 - `HOST`, `PORT`
 - `ALLOWED_ORIGINS`
+- `STRICT_ORIGIN_CHECK`
 - `ALLOW_NATIVE_ORIGINLESS`（允许 Electron 安装版在无 Origin / `file://` 的情况下连接）
 - `REQUEST_TTL_MS`
 - `HEARTBEAT_INTERVAL_MS`

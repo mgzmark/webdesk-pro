@@ -39,6 +39,7 @@ const PORT = Number(process.env.PORT ?? 3000);
 const REQUEST_TTL_MS = Number(process.env.REQUEST_TTL_MS ?? 30_000);
 const HEARTBEAT_INTERVAL_MS = Number(process.env.HEARTBEAT_INTERVAL_MS ?? 15_000);
 const PEER_STALE_MS = Number(process.env.PEER_STALE_MS ?? 45_000);
+const STRICT_ORIGIN_CHECK = process.env.STRICT_ORIGIN_CHECK === "true";
 const ALLOW_NATIVE_ORIGINLESS = process.env.ALLOW_NATIVE_ORIGINLESS !== "false";
 const ALLOWED_ORIGINS = new Set(
   (process.env.ALLOWED_ORIGINS ?? "")
@@ -110,6 +111,7 @@ function buildIceServers(): IceServerConfig[] {
 const ICE_SERVERS = buildIceServers();
 
 function isAllowedOrigin(originHeader?: string, requestHost?: string) {
+  if (!STRICT_ORIGIN_CHECK || ALLOWED_ORIGINS.size === 0) {
 function isAllowedOrigin(originHeader?: string) {
   if (ALLOWED_ORIGINS.size === 0) {
     return true;
