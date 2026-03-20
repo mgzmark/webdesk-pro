@@ -97,6 +97,8 @@ Electron Host 的运行时地址优先级为：
 3. 安装包内携带的 `config.json`
 4. 内置默认值 `ws://192.168.221.79:3000/signaling`
 
+如果你的服务端开启了 `ALLOWED_ORIGINS`，请同时保留 `ALLOW_NATIVE_ORIGINLESS=true`；因为安装版 Electron Host 往往没有浏览器页面那样的 Origin 头，或者会以 `file://` / `null` 的形式出现。
+
 更多说明见：
 
 - `electron-host/`
@@ -122,6 +124,7 @@ WS_URL=wss://your-domain.example/signaling node host.cjs <HOST_ID> <HOST_PASS>
 
 - `HOST`, `PORT`
 - `ALLOWED_ORIGINS`
+- `ALLOW_NATIVE_ORIGINLESS`（允许 Electron 安装版在无 Origin / `file://` 的情况下连接）
 - `REQUEST_TTL_MS`
 - `HEARTBEAT_INTERVAL_MS`
 - `PEER_STALE_MS`

@@ -39,6 +39,7 @@ const PORT = Number(process.env.PORT ?? 3000);
 const REQUEST_TTL_MS = Number(process.env.REQUEST_TTL_MS ?? 30_000);
 const HEARTBEAT_INTERVAL_MS = Number(process.env.HEARTBEAT_INTERVAL_MS ?? 15_000);
 const PEER_STALE_MS = Number(process.env.PEER_STALE_MS ?? 45_000);
+const ALLOW_NATIVE_ORIGINLESS = process.env.ALLOW_NATIVE_ORIGINLESS !== "false";
 const ALLOWED_ORIGINS = new Set(
   (process.env.ALLOWED_ORIGINS ?? "")
     .split(",")
@@ -114,6 +115,11 @@ function isAllowedOrigin(originHeader?: string) {
   }
 
   if (!originHeader) {
+    return ALLOW_NATIVE_ORIGINLESS;
+  }
+
+  if (originHeader === "null" || originHeader.startsWith("file://")) {
+    return true;
     return false;
   }
 
@@ -467,6 +473,7 @@ async function startServer() {
 
   wss.on("connection", (ws, req) => {
     if (!isAllowedOrigin(req.headers.origin)) {
+      console.warn("Rejected signaling connection due to origin:", req.headers.origin);
       safeSend(ws, { type: "error", message: "Origin is not allowed." });
       ws.close(1008, "Origin not allowed");
       return;
