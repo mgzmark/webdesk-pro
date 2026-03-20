@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useStore } from './store';
 import { RemoteDesktopClient } from './lib/RemoteDesktopClient';
-import { Monitor, Key, AlertCircle, X, MousePointer2, Terminal, GripHorizontal } from 'lucide-react';
+import { Monitor, Key, AlertCircle, X, MousePointer2, GripHorizontal, Download, Shield, Zap } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export default function App() {
@@ -174,32 +174,50 @@ export default function App() {
                   </div>
                 </div>
                 <p className="text-sm text-zinc-500 pt-4 border-t border-zinc-800">
-                  Share this ID and password to allow someone else to control this device.
+                  Share this ID and password with your Electron Host or fallback browser host to start a secure session.
                 </p>
-                
-                {/* 增加本地脚本运行提示 */}
+
                 <div className="mt-6 pt-6 border-t border-zinc-800">
                   <h3 className="text-sm font-medium text-zinc-300 mb-2 flex items-center gap-2">
-                    <Terminal className="w-4 h-4" />
-                    Enable Real Mouse Control
+                    <Download className="w-4 h-4" />
+                    Electron Host · Recommended
                   </h3>
-                  <p className="text-xs text-zinc-500 mb-3">
-                    To allow the remote user to actually control your mouse (not just see a red dot), run this command in your terminal:
-                  </p>
-                  <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-800 overflow-x-auto">
-                    <code className="text-xs font-mono text-emerald-400 whitespace-nowrap">
-                      # 如果你在本地运行项目:
-                      <br />
-                      node host.cjs {localId || '<ID>'} {localPass || '<PASS>'}
-                      <br /><br />
-                      # 如果你想连接到云端 AI Studio (替换为你的真实分享链接):
-                      <br />
-                      WS_URL=wss://ais-pre-....run.app/signaling node host.cjs {localId || '<ID>'} {localPass || '<PASS>'}
-                    </code>
+                  <div className="space-y-3 text-xs text-zinc-500">
+                    <p>
+                      Use the standalone Electron Host app for the official production path: it captures the desktop, applies native mouse/keyboard input, and keeps the browser UI focused on viewing + control.
+                    </p>
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                        <div className="mb-2 flex items-center gap-2 text-zinc-300">
+                          <Download className="h-4 w-4 text-indigo-400" />
+                          Package
+                        </div>
+                        <p>
+                          Open the <span className="font-mono text-zinc-200">electron-host/</span> app and run
+                          <span className="font-mono text-emerald-400"> npm install && npm start</span>.
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                        <div className="mb-2 flex items-center gap-2 text-zinc-300">
+                          <Shield className="h-4 w-4 text-emerald-400" />
+                          Security
+                        </div>
+                        <p>
+                          TURN / allowed origins / session teardown are managed by the signaling server, so Electron Host uses the same hardened session flow as the web client.
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                        <div className="mb-2 flex items-center gap-2 text-zinc-300">
+                          <Zap className="h-4 w-4 text-amber-400" />
+                          Fallback
+                        </div>
+                        <p>Need a quick local bridge? The legacy Node companion still works:</p>
+                        <code className="mt-2 block whitespace-pre-wrap font-mono text-[11px] text-emerald-400">
+                          node host.cjs {localId || '<ID>'} {localPass || '<PASS>'}
+                        </code>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-[10px] text-zinc-600 mt-2">
-                    Requires Node.js. Run `npm install ws @nut-tree-fork/nut-js` first if you haven't.
-                  </p>
                 </div>
               </div>
             </div>
@@ -257,7 +275,7 @@ export default function App() {
             </div>
             <h2 className="text-2xl font-medium text-emerald-400 mb-2">Session Active</h2>
             <p className="text-zinc-400 max-w-md">
-              Your screen is currently being shared. The remote user can see your screen and send virtual control inputs.
+              Your screen is currently being shared. For the best production-grade host path, prefer the standalone Electron Host app; browser sharing remains available as a quick fallback.
             </p>
             
             {/* 虚拟屏幕区域 (用于演示接收到的鼠标指令) */}
