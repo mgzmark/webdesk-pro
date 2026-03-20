@@ -1,6 +1,7 @@
 const runtimeConfig = window.electronAPI.getRuntimeConfig();
 const WS_URL = runtimeConfig.signalingUrl;
 console.log('[Electron Host] Runtime config:', runtimeConfig);
+const WS_URL = runtimeConfig.signalingUrl || 'ws://localhost:3000/signaling';
 
 let ws;
 let pc;
